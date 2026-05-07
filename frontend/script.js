@@ -78,23 +78,35 @@ async function submitAnswer() {
 
     clearInterval(timerInterval);
 
-    const response = await fetch(`${API_BASE}/answer`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            question_id: currentQuestionId,
-            user_answer: answer
-        })
-    });
+    // Show loading state so user knows it's working
+    resultEl.style.color = "";
+    resultEl.innerText = "Scoring your answer...";
 
-    const data = await response.json();
+    try {
+        const response = await fetch(`${API_BASE}/answer`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                question_id: currentQuestionId,
+                user_answer: answer
+            })
+        });
 
-    sessionScores.push(data.score);
-    sessionDifficulties.push(currentDifficulty);
+        const data = await response.json();
 
-    resultEl.innerText = `Score: ${data.score} / 100`;
+        sessionScores.push(data.score);
+        sessionDifficulties.push(currentDifficulty);
 
-    setTimeout(() => getQuestion(), 1500);
+        const score = data.score;
+        resultEl.style.color = score >= 70 ? "green" : score >= 40 ? "orange" : "red";
+        resultEl.innerText = `Score: ${score} / 100`;
+
+        setTimeout(() => getQuestion(), 1800);
+
+    } catch (err) {
+        resultEl.style.color = "red";
+        resultEl.innerText = "Error submitting. Is the server running?";
+    }
 }
 
 
@@ -162,11 +174,12 @@ function restartSession() {
     if (summary) summary.style.display = "none";
 }
 
-//Mock Answer Submission
+// Mock Answer Submission
 async function submitMockAnswer(questionId) {
 
     const answerEl = document.getElementById(`mockAnswer-${questionId}`);
     const resultEl = document.getElementById(`mockResult-${questionId}`);
+    const btnEl    = document.getElementById(`mockBtn-${questionId}`);
 
     const answer = answerEl.value.trim();
 
@@ -175,21 +188,36 @@ async function submitMockAnswer(questionId) {
         return;
     }
 
-    const response = await fetch(`${API_BASE}/answer`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            question_id: questionId,
-            user_answer: answer
-        })
-    });
+    // Disable button and show loading so user knows it's working
+    btnEl.disabled = true;
+    btnEl.innerText = "Scoring...";
+    resultEl.innerText = "";
+    resultEl.style.color = "";
 
-    const data = await response.json();
-    console.log("Attempt response:", data);
+    try {
+        const response = await fetch(`${API_BASE}/answer`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                question_id: questionId,
+                user_answer: answer
+            })
+        });
 
-    resultEl.innerText = `Score: ${data.score} / 100`;
+        const data = await response.json();
+        console.log("Attempt response:", data);
+
+        const score = data.score;
+        resultEl.style.color = score >= 70 ? "green" : score >= 40 ? "orange" : "red";
+        resultEl.innerText = `Score: ${score} / 100`;
+        btnEl.innerText = "Submitted ✓";
+
+    } catch (err) {
+        resultEl.style.color = "red";
+        resultEl.innerText = "Error submitting. Is the server running?";
+        btnEl.disabled = false;
+        btnEl.innerText = "Submit Answer";
+    }
 }
 // mock interview
 async function startMock() {
@@ -219,12 +247,14 @@ async function startMock() {
                         placeholder="Type your answer here..."></textarea>
 
                     <button 
+                        type="button"
+                        id="mockBtn-${q.id}"
                         onclick="submitMockAnswer(${q.id})" 
                         class="btn btn-primary">
                         Submit Answer
                     </button>
 
-                    <p id="mockResult-${q.id}" class="mt-2"></p>
+                    <p id="mockResult-${q.id}" class="mt-2 fw-bold"></p>
                 </div>
             </div>
         `;
