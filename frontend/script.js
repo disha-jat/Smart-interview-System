@@ -70,17 +70,31 @@ async function submitAnswer() {
 
     const answerEl = document.getElementById("answer");
     const resultEl = document.getElementById("result");
+    const submitBtn = document.querySelector(".btn-success");
 
     if (!answerEl || !resultEl) return;
 
     const answer = answerEl.value.trim();
-    if (!answer) return;
+
+    // FIX: Show message instead of silently returning on blank answer
+    if (!answer) {
+        resultEl.style.color = "orange";
+        resultEl.innerText = "⚠️ Please write an answer before submitting.";
+        return;
+    }
+
+    // Guard: no question loaded yet
+    if (!currentQuestionId) {
+        resultEl.style.color = "orange";
+        resultEl.innerText = "⚠️ Please load a question first.";
+        return;
+    }
 
     clearInterval(timerInterval);
 
-    // Show loading state so user knows it's working
-    resultEl.style.color = "";
-    resultEl.innerText = "Scoring your answer...";
+    resultEl.style.color = "#555";
+    resultEl.innerText = "⏳ Scoring your answer...";
+    if (submitBtn) submitBtn.disabled = true;
 
     try {
         const response = await fetch(`${API_BASE}/answer`, {
@@ -94,18 +108,33 @@ async function submitAnswer() {
 
         const data = await response.json();
 
-        sessionScores.push(data.score);
-        sessionDifficulties.push(currentDifficulty);
+        // FIX: Defensive check — if API returns {error:...} instead of {score:N}, show it cleanly
+        if (data.error || typeof data.score === "undefined") {
+            resultEl.style.color = "red";
+            resultEl.innerText = `❌ Server error: ${data.error || "unexpected response"}`;
+            if (submitBtn) submitBtn.disabled = false;
+            return;
+        }
 
         const score = data.score;
-        resultEl.style.color = score >= 70 ? "green" : score >= 40 ? "orange" : "red";
-        resultEl.innerText = `Score: ${score} / 100`;
+        sessionScores.push(score);
+        sessionDifficulties.push(currentDifficulty);
 
-        setTimeout(() => getQuestion(), 1800);
+        resultEl.style.color = score >= 70 ? "green" : score >= 40 ? "orange" : "red";
+        // FIX: Explicit message when score is 0 (random / irrelevant answer)
+        resultEl.innerText = score === 0
+            ? "Score: 0 / 100 — Answer was blank, random, or unrelated."
+            : `Score: ${score} / 100`;
+
+        setTimeout(() => {
+            if (submitBtn) submitBtn.disabled = false;
+            getQuestion();
+        }, 2000);
 
     } catch (err) {
         resultEl.style.color = "red";
-        resultEl.innerText = "Error submitting. Is the server running?";
+        resultEl.innerText = "❌ Could not reach the server. Is it running?";
+        if (submitBtn) submitBtn.disabled = false;
     }
 }
 
@@ -183,14 +212,16 @@ async function submitMockAnswer(questionId) {
 
     const answer = answerEl.value.trim();
 
+    // FIX: Show inline message instead of alert, no page interaction
     if (!answer) {
-        alert("Please enter an answer");
+        resultEl.style.color = "orange";
+        resultEl.innerText = "⚠️ Please write an answer before submitting.";
         return;
     }
 
     // Disable button and show loading so user knows it's working
     btnEl.disabled = true;
-    btnEl.innerText = "Scoring...";
+    btnEl.innerText = "⏳ Scoring...";
     resultEl.innerText = "";
     resultEl.style.color = "";
 
@@ -205,16 +236,27 @@ async function submitMockAnswer(questionId) {
         });
 
         const data = await response.json();
-        console.log("Attempt response:", data);
+
+        // FIX: Defensive check — handle {error:...} responses without crashing
+        if (data.error || typeof data.score === "undefined") {
+            resultEl.style.color = "red";
+            resultEl.innerText = `❌ Server error: ${data.error || "unexpected response"}`;
+            btnEl.disabled = false;
+            btnEl.innerText = "Submit Answer";
+            return;
+        }
 
         const score = data.score;
         resultEl.style.color = score >= 70 ? "green" : score >= 40 ? "orange" : "red";
-        resultEl.innerText = `Score: ${score} / 100`;
+        // FIX: Explicit 0 message for random/blank answers
+        resultEl.innerText = score === 0
+            ? "Score: 0 / 100 — Answer was blank, random, or unrelated."
+            : `Score: ${score} / 100`;
         btnEl.innerText = "Submitted ✓";
 
     } catch (err) {
         resultEl.style.color = "red";
-        resultEl.innerText = "Error submitting. Is the server running?";
+        resultEl.innerText = "❌ Could not reach the server. Is it running?";
         btnEl.disabled = false;
         btnEl.innerText = "Submit Answer";
     }
